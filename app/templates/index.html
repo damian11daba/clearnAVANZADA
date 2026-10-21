@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearnP.A — Programación Avanzada IIC2233</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════
+       TOP BAR
+  ═══════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar__left">
+      <a href="/" class="topbar__logo">
+        <span class="logo-icon">&lt;/&gt;</span>
+        <span class="logo-text">ClearnP<span class="logo-accent">.A</span></span>
+      </a>
+      <span class="badge badge--student">Estudiante</span>
+    </div>
+
+    <nav class="topbar__breadcrumb" aria-label="breadcrumb">
+      <span class="breadcrumb__item">Programación Avanzada</span>
+      <span class="breadcrumb__sep">›</span>
+      <span class="breadcrumb__item">2026 - Primero</span>
+      <span class="breadcrumb__sep">›</span>
+      <span class="breadcrumb__item breadcrumb__item--active" id="breadcrumb-current">AC1</span>
+    </nav>
+
+    <div class="topbar__right">
+      <div class="avatar" title="Mi perfil">PA</div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════
+       MAIN LAYOUT  (sidebar | enunciado | editor)
+  ═══════════════════════════════════════════ -->
+  <main class="app-grid">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__header">
+        <span class="sidebar__title">Preguntas</span>
+        <span class="sidebar__count" id="sidebar-count">—</span>
+      </div>
+
+      <ul class="question-list" id="question-list" role="listbox" aria-label="Lista de preguntas">
+        <!-- Populated by app.js -->
+        <li class="question-list__skeleton"></li>
+        <li class="question-list__skeleton"></li>
+        <li class="question-list__skeleton"></li>
+        <li class="question-list__skeleton"></li>
+      </ul>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--revisar" id="btn-revisar" disabled>
+          ✓ Revisar entrega
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── PANEL CENTRAL (Enunciado) ── -->
+    <section class="enunciado-panel" id="enunciado-panel" aria-label="Enunciado del ejercicio">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state__icon">&lt;/&gt;</div>
+        <p class="empty-state__text">Selecciona una pregunta del panel izquierdo para comenzar.</p>
+      </div>
+
+      <!-- Exercise content (hidden until loaded) -->
+      <article class="enunciado" id="enunciado" hidden>
+        <div class="enunciado__header">
+          <span class="badge" id="ej-badge">Actividad</span>
+          <h1 class="enunciado__title" id="ej-title">—</h1>
+        </div>
+
+        <div class="enunciado__section">
+          <h2 class="enunciado__section-title">🎯 Objetivo</h2>
+          <p class="enunciado__objetivo" id="ej-objetivo">—</p>
+        </div>
+
+        <div class="enunciado__section">
+          <h2 class="enunciado__section-title">📋 Descripción</h2>
+          <div class="enunciado__desc" id="ej-descripcion">—</div>
+        </div>
+
+        <!-- Examples container (filled dynamically) -->
+        <div class="enunciado__section" id="ej-ejemplos-section" hidden>
+          <h2 class="enunciado__section-title">💡 Ejemplos</h2>
+          <div id="ej-ejemplos"></div>
+        </div>
+
+        <!-- Explanation -->
+        <div class="enunciado__section" id="ej-explicacion-section" hidden>
+          <h2 class="enunciado__section-title">🔍 Explicación</h2>
+          <div class="enunciado__explicacion" id="ej-explicacion"></div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ── PANEL DERECHO (Editor) ── -->
+    <section class="editor-panel" aria-label="Editor de código">
+
+      <!-- File tabs -->
+      <div class="editor-tabs" id="editor-tabs" role="tablist">
+        <button class="editor-tab editor-tab--active" role="tab" data-file="code.py" aria-selected="true">
+          <span class="tab-icon">🐍</span> code.py
+        </button>
+        <button class="editor-tab" role="tab" data-file="entities.py" aria-selected="false">
+          <span class="tab-icon">📦</span> entities.py
+        </button>
+      </div>
+
+      <!-- Monaco Editor mount point -->
+      <div id="editor-container" aria-label="Editor Monaco"></div>
+
+      <!-- Action buttons -->
+      <div class="editor-actions">
+        <button class="btn btn--ejecutar" id="btn-ejecutar" title="Ejecutar código (Ctrl+Enter)">
+          ▶ Ejecutar
+        </button>
+        <button class="btn btn--limpiar" id="btn-limpiar" title="Restaurar código inicial">
+          ↺ Limpiar
+        </button>
+        <button class="btn btn--entregar" id="btn-entregar" title="Entregar solución">
+          📤 Entregar
+        </button>
+        <span class="editor-status" id="editor-status"></span>
+      </div>
+
+      <!-- Results / Terminal panel -->
+      <div class="results-panel" id="results-panel">
+        <div class="results-panel__header" id="results-toggle" role="button" tabindex="0" aria-expanded="true" aria-controls="results-body">
+          <span class="results-panel__title">⬛ Terminal — Resultados</span>
+          <span class="results-panel__chevron" id="results-chevron">▼</span>
+        </div>
+        <div class="results-panel__body" id="results-body">
+          <pre class="results-panel__output" id="results-output"><span class="results-hint">// Presiona ▶ Ejecutar para ver los resultados aquí.</span></pre>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Monaco Editor loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+
+  <!-- Application logic -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

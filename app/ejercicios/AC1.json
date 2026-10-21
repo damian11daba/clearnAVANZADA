@@ -1,0 +1,35 @@
+{
+  "id": "AC1",
+  "titulo": "AC1: Tabla de Medallistas Olímpicos",
+  "tipo": "actividad",
+  "semana": "Semana 3-4",
+  "dificultad": "Media",
+  "objetivo": "Implementar un sistema de seguimiento de medallistas olímpicos usando Programación Orientada a Objetos. Deberás completar el método `agregar_medallista` de la clase `TablaPuntajes` y la función `cargar_medallistas`.",
+  "preguntas": [
+    {
+      "id": 1,
+      "titulo": "Cargar Medallistas",
+      "descripcion": "Implementa la función `cargar_medallistas(ruta: str) -> list[Medallista]` en `main.py`. La función debe leer el archivo `.dcc` (formato CSV separado por comas) y retornar una lista de objetos `Medallista`. Cada línea del archivo tiene el formato: `nombre,deporte,medalla,pais`.",
+      "archivo_editable": "main.py",
+      "codigo_inicial": "from entities import Medallista, Pais, TablaPuntajes\n\ndef cargar_medallistas(ruta: str) -> list[Medallista]:\n    \"\"\"\n    Lee el archivo de resultados y retorna una lista de objetos Medallista.\n    El archivo tiene formato CSV: nombre,deporte,medalla,pais\n    \"\"\"\n    # TODO: Completar esta función\n    pass\n\ndef crear_tabla(medallistas: list[Medallista]) -> TablaPuntajes:\n    \"\"\"\n    Crea una TablaPuntajes y agrega todos los medallistas.\n    \"\"\"\n    # TODO: Completar esta función\n    pass\n\nif __name__ == '__main__':\n    medallistas = cargar_medallistas('utils/results.dcc')\n    tabla = crear_tabla(medallistas)\n    paises_ordenados = tabla.ordenar_paises()\n    for i, pais in enumerate(paises_ordenados, 1):\n        print(f'{i}. {pais.nombre_pais}: {pais.oros} Oros, {pais.platas} Platas, {pais.bronces} Bronces (Puntaje: {pais.puntaje})')\n",
+      "archivos_soporte": {
+        "entities.py": "def get_puntaje(pais):\n    return pais.puntaje\n\nclass Medallista:\n    def __init__(self, nombre: str, deporte: str, medalla: str, nombre_pais: str):\n        self.nombre = nombre\n        self.deporte = deporte\n        self.medalla = medalla\n        self.nombre_pais = nombre_pais\n\nclass Pais:\n    def __init__(self, nombre_pais: str):\n        self.nombre_pais = nombre_pais\n        self.puntaje = 0\n        self.oros = 0\n        self.platas = 0\n        self.bronces = 0\n\n    def agregar_medallista(self, medallista: Medallista):\n        if medallista.medalla == 'Oro':\n            self.oros += 1\n            self.puntaje += 5\n        elif medallista.medalla == 'Plata':\n            self.platas += 1\n            self.puntaje += 3\n        elif medallista.medalla == 'Bronce':\n            self.bronces += 1\n            self.puntaje += 1\n\nclass TablaPuntajes:\n    def __init__(self):\n        self.paises = []\n\n    def agregar_medallista(self, medallista: Medallista):\n        nombre_pais = medallista.nombre_pais\n        existe = False\n        for pais in self.paises:\n            if nombre_pais == pais.nombre_pais:\n                existe = True\n                pais.agregar_medallista(medallista)\n                break\n        if not existe:\n            nuevo_pais = Pais(nombre_pais)\n            nuevo_pais.agregar_medallista(medallista)\n            self.paises.append(nuevo_pais)\n\n    def ordenar_paises(self) -> list:\n        return sorted(self.paises, key=get_puntaje, reverse=True)\n"
+      },
+      "ejemplo_input": "# El archivo utils/results.dcc tiene formato:\nElin Andersson,Patinaje Artístico,Bronce,Suecia\nLucas García,Atletismo,Oro,España\n...",
+      "ejemplo_output": "1. España: 3 Oros, 2 Platas, 1 Bronces (Puntaje: 22)\n2. Suecia: 0 Oros, 0 Platas, 2 Bronces (Puntaje: 2)\n...",
+      "explicacion": "Debes leer cada línea del archivo CSV y crear un objeto Medallista por línea. Luego en `crear_tabla`, iterar sobre los medallistas y agregarlos a la TablaPuntajes.",
+      "tests": [
+        {
+          "nombre": "test_leer_medallistas",
+          "descripcion": "Verifica que el índice 4 de la lista sea Elin Andersson de Suecia con Bronce en Patinaje Artístico",
+          "tipo": "unittest"
+        },
+        {
+          "nombre": "test_crear_tabla",
+          "descripcion": "Verifica que la tabla tenga exactamente 10 países, que Italia tenga 0 oros, 1 plata, 2 bronces y puntaje 5",
+          "tipo": "unittest"
+        }
+      ]
+    }
+  ]
+}
