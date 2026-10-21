@@ -1,664 +1,790 @@
-/**
- * ClearnP.A — Application Logic
- * Vanilla JS (ES2022+), async/await, no frameworks
- */
+/* ════════════════════════════════════════════════════════════════════
+   ClearnP.A — app.js Oficial
+   Motor Interactivo WebAssembly (Pyodide) + Deep Linking + Escalera Gradual
+════════════════════════════════════════════════════════════════════ */
 
-/* ══════════════════════════════════════════════════
-   STATE
-══════════════════════════════════════════════════ */
-const state = {
-  currentEjercicioId: null,
-  initialCode: {},       // { filename: code }  — per-file initial code
-  fileCode: {},          // { filename: code }  — per-file current edits
-  activeFile: 'code.py',
-  monacoEditor: null,
-  ejercicios: [],
+// Estado global de la aplicación
+const App = {
+  cursoData: null,
+  pyodide: null,
+  pyodideCargando: false,
+  vistaActual: 'home',
+  semanaActual: null,
+  leccionActual: null,
+  ejercicioActual: null,
+  archivosActivos: {},
+  archivoActual: 'main.py',
+  codigoOriginal: '',
+  testsActuales: null,
+  tipoActual: 'ejercicio' // 'ejercicio', 'actividad', 'evaluacion'
 };
 
-/* ══════════════════════════════════════════════════
-   DOM SHORTCUTS
-══════════════════════════════════════════════════ */
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+// ── 1. INICIALIZACIÓN ──
+document.addEventListener('DOMContentLoaded', async () => {
+  // Manejo de teclado en el editor (Tab indentation & Ctrl+Enter)
+  configurarEditorTextarea();
 
-const el = {
-  questionList:    $('#question-list'),
-  sidebarCount:    $('#sidebar-count'),
-  breadcrumbCurr:  $('#breadcrumb-current'),
-  emptyState:      $('#empty-state'),
-  enunciado:       $('#enunciado'),
-  ejBadge:         $('#ej-badge'),
-  ejTitle:         $('#ej-title'),
-  ejObjetivo:      $('#ej-objetivo'),
-  ejDescripcion:   $('#ej-descripcion'),
-  ejEjemplosSection: $('#ej-ejemplos-section'),
-  ejEjemplos:      $('#ej-ejemplos'),
-  ejExplicacionSection: $('#ej-explicacion-section'),
-  ejExplicacion:   $('#ej-explicacion'),
-  editorTabs:      $('#editor-tabs'),
-  editorContainer: $('#editor-container'),
-  btnEjecutar:     $('#btn-ejecutar'),
-  btnLimpiar:      $('#btn-limpiar'),
-  btnEntregar:     $('#btn-entregar'),
-  btnRevisar:      $('#btn-revisar'),
-  editorStatus:    $('#editor-status'),
-  resultsPanel:    $('#results-panel'),
-  resultsToggle:   $('#results-toggle'),
-  resultsBody:     $('#results-body'),
-  resultsChevron:  $('#results-chevron'),
-  resultsOutput:   $('#results-output'),
-};
+  // Iniciar carga de Pyodide en segundo plano
+  iniciarPyodide();
 
-/* ══════════════════════════════════════════════════
-   MONACO EDITOR BOOTSTRAP
-══════════════════════════════════════════════════ */
-function initMonaco() {
-  return new Promise((resolve) => {
-    require.config({
-      paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' },
-    });
+  // Cargar datos del curso
+  await cargarDatosCurso();
 
-    require(['vs/editor/editor.main'], () => {
-      const editor = monaco.editor.create(el.editorContainer, {
-        value:             '# Selecciona un ejercicio para comenzar\n',
-        language:          'python',
-        theme:             'vs-dark',
-        fontSize:          14,
-        fontFamily:        "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-        fontLigatures:     true,
-        lineNumbers:       'on',
-        minimap:           { enabled: false },
-        scrollBeyondLastLine: false,
-        tabSize:           4,
-        wordWrap:          'on',
-        automaticLayout:   true,
-        padding:           { top: 12, bottom: 12 },
-        renderLineHighlight: 'line',
-        smoothScrolling:   true,
-      });
+  // Escuchar cambios de Hash en la URL para deep-linking
+  window.addEventListener('hashchange', procesarRutaHash);
 
-      state.monacoEditor = editor;
+  // Procesar ruta inicial
+  procesarRutaHash();
+});
 
-      // Ctrl+Enter → ejecutar
-      editor.addCommand(
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-        () => el.btnEjecutar.click()
-      );
+// ── 2. MOTOR PYODIDE (PYTHON EN EL NAVEGADOR) ──
+async function iniciarPyodide() {
+  const statusEl = document.getElementById('pyodide-status');
+  const dotEl = statusEl?.querySelector('.status-dot');
+  const textEl = document.getElementById('status-text');
 
-      // Track edits per-file
-      editor.onDidChangeModelContent(() => {
-        state.fileCode[state.activeFile] = editor.getValue();
-      });
-
-      resolve(editor);
-    });
-  });
-}
-
-/* ══════════════════════════════════════════════════
-   SIMPLE MARKDOWN RENDERER
-  Converts a subset of Markdown to HTML:
-    **bold**, `code`, - list items, \n\n paragraphs
-══════════════════════════════════════════════════ */
-function renderMarkdown(text) {
-  if (!text) return '';
-
-  // Escape HTML first
-  const escape = (s) =>
-    s.replace(/&/g, '&amp;')
-     .replace(/</g, '&lt;')
-     .replace(/>/g, '&gt;');
-
-  text = escape(text);
-
-  // Inline code  `code`
-  text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Bold  **text**
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Italic  *text*
-  text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // Lists: lines starting with "- "
-  const lines = text.split('\n');
-  const out = [];
-  let inList = false;
-
-  for (const line of lines) {
-    const listMatch = line.match(/^[-*]\s+(.*)$/);
-    if (listMatch) {
-      if (!inList) { out.push('<ul>'); inList = true; }
-      out.push(`<li>${listMatch[1]}</li>`);
-    } else {
-      if (inList) { out.push('</ul>'); inList = false; }
-      out.push(line);
-    }
+  if (typeof loadPyodide === 'undefined') {
+    if (textEl) textEl.textContent = 'Modo Flask';
+    return;
   }
-  if (inList) out.push('</ul>');
 
-  // Paragraphs (double newline)
-  return out
-    .join('\n')
-    .split(/\n{2,}/)
-    .map((p) => {
-      p = p.trim();
-      if (!p) return '';
-      // Don't wrap block-level elements
-      if (/^<(ul|ol|li|h[1-6]|pre|blockquote)/.test(p)) return p;
-      return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-    })
-    .join('\n');
-}
-
-/* ══════════════════════════════════════════════════
-   BADGE HELPER
-══════════════════════════════════════════════════ */
-const BADGE_CLASS = {
-  actividad:  'badge--actividad',
-  materia:    'badge--materia',
-  evaluacion: 'badge--evaluacion',
-  tarea:      'badge--tarea',
-};
-
-function setBadge(tipo = 'actividad') {
-  const key = tipo.toLowerCase();
-  el.ejBadge.className = `badge ${BADGE_CLASS[key] || 'badge--actividad'}`;
-  el.ejBadge.textContent = tipo.charAt(0).toUpperCase() + tipo.slice(1);
-}
-
-/* ══════════════════════════════════════════════════
-   EXAMPLE BLOCKS (Input / Output)
-══════════════════════════════════════════════════ */
-function buildExampleBlock(label, content, variant) {
-  const block = document.createElement('div');
-  block.className = `example-block example-block--${variant}`;
-
-  const header = document.createElement('div');
-  header.className = 'example-block__header';
-
-  const lbl = document.createElement('span');
-  lbl.className = `example-block__label example-block__label--${variant}`;
-  lbl.textContent = label;
-
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'example-block__copy';
-  copyBtn.textContent = '📋 Copiar';
-  copyBtn.addEventListener('click', () => copyToClipboard(content, copyBtn));
-
-  header.appendChild(lbl);
-  header.appendChild(copyBtn);
-
-  const code = document.createElement('pre');
-  code.className = 'example-block__code';
-  code.textContent = content;
-
-  block.appendChild(header);
-  block.appendChild(code);
-  return block;
-}
-
-async function copyToClipboard(text, btn) {
   try {
-    await navigator.clipboard.writeText(text);
-    btn.textContent = '✅ Copiado';
-    btn.classList.add('copied');
-    setTimeout(() => {
-      btn.textContent = '📋 Copiar';
-      btn.classList.remove('copied');
-    }, 1800);
-  } catch {
-    // Fallback for older browsers / non-HTTPS
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;opacity:0';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    btn.textContent = '✅ Copiado';
-    setTimeout(() => { btn.textContent = '📋 Copiar'; }, 1800);
-  }
-}
-
-/* ══════════════════════════════════════════════════
-   RENDER EXERCISE
-══════════════════════════════════════════════════ */
-function renderEjercicio(data) {
-  // Header
-  setBadge(data.tipo || 'actividad');
-  el.ejTitle.textContent       = data.titulo || data.nombre || '(Sin título)';
-  el.ejObjetivo.textContent    = data.objetivo || '';
-  el.ejDescripcion.innerHTML   = renderMarkdown(data.descripcion || '');
-  el.breadcrumbCurr.textContent = data.nombre_corto || data.id;
-
-  // Examples
-  el.ejEjemplos.innerHTML = '';
-  const ejemplos = data.ejemplos || [];
-  if (ejemplos.length > 0) {
-    ejemplos.forEach((ej, i) => {
-      const wrap = document.createElement('div');
-      wrap.style.marginBottom = '1rem';
-
-      if (ej.titulo) {
-        const h3 = document.createElement('p');
-        h3.style.cssText = 'font-size:.82rem;font-weight:600;margin-bottom:.4rem;color:var(--text-secondary)';
-        h3.textContent = `Ejemplo ${i + 1}: ${ej.titulo}`;
-        wrap.appendChild(h3);
-      }
-      if (ej.input  !== undefined) wrap.appendChild(buildExampleBlock('INPUT',  ej.input,  'input'));
-      if (ej.output !== undefined) wrap.appendChild(buildExampleBlock('OUTPUT', ej.output, 'output'));
-
-      el.ejEjemplos.appendChild(wrap);
-    });
-    el.ejEjemplosSection.hidden = false;
-  } else {
-    el.ejEjemplosSection.hidden = true;
-  }
-
-  // Explanation
-  if (data.explicacion) {
-    el.ejExplicacion.innerHTML  = renderMarkdown(data.explicacion);
-    el.ejExplicacionSection.hidden = false;
-  } else {
-    el.ejExplicacionSection.hidden = true;
-  }
-
-  // Show enunciado
-  el.emptyState.hidden = true;
-  el.enunciado.hidden  = false;
-
-  // Editor: load code files
-  const archivos = data.archivos || { 'code.py': '# Escribe tu solución aquí\n' };
-  state.initialCode = { ...archivos };
-  state.fileCode    = { ...archivos };
-  state.activeFile  = Object.keys(archivos)[0];
-
-  renderEditorTabs(Object.keys(archivos));
-  loadFileIntoEditor(state.activeFile);
-
-  // Enable buttons
-  el.btnEjecutar.disabled = false;
-  el.btnLimpiar.disabled  = false;
-  el.btnEntregar.disabled = false;
-  el.btnRevisar.disabled  = false;
-
-  // Clear terminal
-  setTerminalContent('<span class="results-hint">// Ejercicio cargado. Presiona ▶ Ejecutar para ver los resultados.</span>');
-}
-
-/* ══════════════════════════════════════════════════
-   EDITOR TABS
-══════════════════════════════════════════════════ */
-function renderEditorTabs(files) {
-  el.editorTabs.innerHTML = '';
-  files.forEach((file) => {
-    const btn = document.createElement('button');
-    btn.className  = 'editor-tab' + (file === state.activeFile ? ' editor-tab--active' : '');
-    btn.role       = 'tab';
-    btn.dataset.file = file;
-    btn.setAttribute('aria-selected', file === state.activeFile ? 'true' : 'false');
-
-    const icon = file.endsWith('.py') ? '🐍' : '📦';
-    btn.innerHTML = `<span class="tab-icon">${icon}</span> ${file}`;
-
-    btn.addEventListener('click', () => switchTab(file));
-    el.editorTabs.appendChild(btn);
-  });
-}
-
-function switchTab(filename) {
-  // Save current editor content to state
-  if (state.monacoEditor) {
-    state.fileCode[state.activeFile] = state.monacoEditor.getValue();
-  }
-  state.activeFile = filename;
-
-  // Update tab UI
-  $$('.editor-tab', el.editorTabs).forEach((tab) => {
-    const active = tab.dataset.file === filename;
-    tab.classList.toggle('editor-tab--active', active);
-    tab.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-
-  loadFileIntoEditor(filename);
-}
-
-function loadFileIntoEditor(filename) {
-  if (!state.monacoEditor) return;
-  const code = state.fileCode[filename] ?? '';
-  state.monacoEditor.setValue(code);
-
-  // Set language based on extension
-  const lang = filename.endsWith('.py') ? 'python'
-             : filename.endsWith('.js') ? 'javascript'
-             : filename.endsWith('.json') ? 'json'
-             : 'plaintext';
-
-  const model = state.monacoEditor.getModel();
-  if (model) monaco.editor.setModelLanguage(model, lang);
-
-  state.monacoEditor.focus();
-}
-
-/* ══════════════════════════════════════════════════
-   TERMINAL HELPERS
-══════════════════════════════════════════════════ */
-function setTerminalContent(html) {
-  el.resultsOutput.innerHTML = html;
-}
-
-function showLoading() {
-  setTerminalContent('<span class="results-info">⏳ Ejecutando…</span>');
-  // Expand terminal if collapsed
-  if (el.resultsPanel.classList.contains('collapsed')) toggleTerminal();
-}
-
-function toggleTerminal() {
-  const collapsed = el.resultsPanel.classList.toggle('collapsed');
-  el.resultsToggle.setAttribute('aria-expanded', !collapsed);
-}
-
-/* ══════════════════════════════════════════════════
-   SIDEBAR — load section list
-══════════════════════════════════════════════════ */
-async function loadSidebar() {
-  try {
-    const res  = await fetch('/api/cursos/iic2233-2026-1/secciones');
-    const data = await res.json();
-    const items = data.secciones || data.ejercicios || data || [];
-
-    state.ejercicios = items;
-    el.sidebarCount.textContent = items.length;
-    el.questionList.innerHTML   = '';
-
-    if (items.length === 0) {
-      el.questionList.innerHTML = '<li style="padding:.75rem;color:var(--text-muted);font-size:.82rem">No hay ejercicios disponibles.</li>';
-      return;
-    }
-
-    items.forEach((item, idx) => {
-      const li = buildQuestionItem(item, idx + 1);
-      el.questionList.appendChild(li);
-    });
-
+    App.pyodideCargando = true;
+    if (textEl) textEl.textContent = 'Cargando Python...';
+    
+    App.pyodide = await loadPyodide();
+    
+    App.pyodideCargando = false;
+    if (dotEl) dotEl.classList.add('ready');
+    if (textEl) textEl.textContent = 'Python 3.12 Listo ✓';
   } catch (err) {
-    console.error('[ClearnPA] loadSidebar error:', err);
-    // Show mock data for development / offline
-    loadMockSidebar();
+    console.warn('Pyodide no pudo inicializar, usando backend:', err);
+    if (textEl) textEl.textContent = 'Modo Servidor';
   }
 }
 
-function buildQuestionItem(item, num) {
-  const li = document.createElement('li');
-  li.className = 'question-item';
-  li.setAttribute('role', 'option');
-  li.setAttribute('tabindex', '0');
-  li.dataset.id = item.id ?? num;
+// ── 3. CARGA DE DATOS ──
+async function cargarDatosCurso() {
+  // Intentar cargar curso.json desde static/data/ o data/
+  const rutas = ['data/curso.json', 'static/data/curso.json', '/api/curso'];
+  for (const r of rutas) {
+    try {
+      const res = await fetch(r);
+      if (res.ok) {
+        App.cursoData = await res.json();
+        break;
+      }
+    } catch (e) {
+      // Intentar siguiente
+    }
+  }
 
-  const iconMap = { actividad: '</>', evaluacion: '📝', materia: '📖', tarea: '📋' };
-  const icon = iconMap[(item.tipo || '').toLowerCase()] || '</>';
+  if (!App.cursoData) {
+    console.error('No se pudo cargar el curso.json');
+    return;
+  }
 
-  li.innerHTML = `
-    <span class="question-item__num">${num}</span>
-    <span class="question-item__icon">${icon}</span>
-    <span class="question-item__name" title="${item.nombre || item.titulo || ''}">${item.nombre || item.titulo || `Pregunta ${num}`}</span>
-    <span class="question-item__done">✓</span>
+  renderizarSidebar();
+  renderizarHomeGrid();
+}
+
+// ── 4. ENRUTAMIENTO Y DEEP LINKING (HASH) ──
+function navigateTo(destino, params = {}) {
+  let hash = '';
+  if (destino === 'home') hash = '#home';
+  else if (destino === 'semana') hash = `#semana/${params.semanaId}`;
+  else if (destino === 'leccion') hash = `#semana/${params.semanaId}/leccion/${params.leccionId}`;
+  else if (destino === 'ejercicio') hash = `#semana/${params.semanaId}/ejercicio/${params.ejercicioId}`;
+  else if (destino === 'actividad') hash = `#actividad/${params.actividadId}`;
+  else if (destino === 'evaluacion') hash = `#evaluacion/${params.evalId}`;
+
+  window.location.hash = hash;
+}
+
+function procesarRutaHash() {
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  if (!hash || hash === 'home') {
+    mostrarVista('home');
+    actualizarBreadcrumb('Inicio');
+    return;
+  }
+
+  const partes = hash.split('/');
+  const seccion = partes[0];
+
+  if (seccion === 'semana') {
+    const semanaId = partes[1];
+    if (partes.length === 2) {
+      abrirSemana(semanaId);
+    } else if (partes[2] === 'leccion') {
+      abrirLeccion(semanaId, partes[3]);
+    } else if (partes[2] === 'ejercicio') {
+      abrirEjercicioGuiado(semanaId, partes[3]);
+    }
+  } else if (seccion === 'actividad') {
+    abrirActividad(partes[1]);
+  } else if (seccion === 'evaluacion') {
+    abrirEvaluacion(partes[1]);
+  }
+}
+
+function mostrarVista(vistaId) {
+  document.querySelectorAll('.view').forEach(v => {
+    v.classList.remove('active');
+    v.classList.add('hidden');
+  });
+
+  const target = document.getElementById(`view-${vistaId}`);
+  if (target) {
+    target.classList.remove('hidden');
+    target.classList.add('active');
+  }
+  App.vistaActual = vistaId;
+}
+
+function actualizarBreadcrumb(seccion, item = null) {
+  document.getElementById('bc-seccion').textContent = seccion;
+  const itemEl = document.getElementById('bc-item');
+  const sepEl = document.querySelector('.bc-sep-item');
+  if (item) {
+    itemEl.textContent = item;
+    itemEl.classList.remove('hidden');
+    sepEl?.classList.remove('hidden');
+  } else {
+    itemEl.classList.add('hidden');
+    sepEl?.classList.add('hidden');
+  }
+}
+
+// ── 5. RENDERIZADO DEL SIDEBAR ──
+function renderizarSidebar() {
+  if (!App.cursoData) return;
+
+  // 1. Materias / Semanas
+  const secMaterias = document.getElementById('sec-materias');
+  secMaterias.innerHTML = '';
+  App.cursoData.semanas?.forEach(s => {
+    const li = document.createElement('li');
+    li.className = 'sidebar-item';
+    li.dataset.id = s.id;
+    li.innerHTML = `
+      <span class="sidebar-item-label">${s.nombre}</span>
+      <span class="dif-pill d${s.dificultad}">Niv ${s.dificultad}</span>
+    `;
+    li.onclick = () => navigateTo('semana', { semanaId: s.id });
+    secMaterias.appendChild(li);
+  });
+
+  // 2. Actividades (AC)
+  const secAct = document.getElementById('sec-actividades');
+  secAct.innerHTML = '';
+  App.cursoData.actividades?.forEach(a => {
+    const li = document.createElement('li');
+    li.className = 'sidebar-item';
+    li.dataset.id = a.id;
+    li.innerHTML = `
+      <span class="sidebar-item-label">${a.titulo.split(':')[0]}</span>
+      <span class="dif-pill d${a.dificultad}">Desafío</span>
+    `;
+    li.onclick = () => navigateTo('actividad', { actividadId: a.id });
+    secAct.appendChild(li);
+  });
+
+  // 3. Evaluaciones
+  const secEval = document.getElementById('sec-evaluaciones');
+  secEval.innerHTML = '';
+  App.cursoData.evaluaciones?.forEach(e => {
+    const li = document.createElement('li');
+    li.className = 'sidebar-item';
+    li.dataset.id = e.id;
+    li.innerHTML = `
+      <span class="sidebar-item-label">${e.titulo}</span>
+      <span class="dif-pill d${e.dificultad}">Evaluado</span>
+    `;
+    li.onclick = () => navigateTo('evaluacion', { evalId: e.id });
+    secEval.appendChild(li);
+  });
+}
+
+function filtrarSidebar(texto) {
+  const query = texto.toLowerCase();
+  document.querySelectorAll('.sidebar-item').forEach(el => {
+    const label = el.querySelector('.sidebar-item-label')?.textContent.toLowerCase() || '';
+    el.style.display = label.includes(query) ? 'flex' : 'none';
+  });
+}
+
+function toggleSeccion(id) {
+  const ul = document.getElementById(id);
+  const arrow = document.getElementById(`arrow-${id}`);
+  const isOpen = ul.dataset.open === 'true';
+  ul.dataset.open = isOpen ? 'false' : 'true';
+  ul.classList.toggle('collapsed', isOpen);
+  arrow?.classList.toggle('collapsed', isOpen);
+}
+
+// ── 6. VISTA HOME / DASHBOARD ──
+function renderizarHomeGrid() {
+  const grid = document.getElementById('home-semanas-grid');
+  if (!grid || !App.cursoData?.semanas) return;
+
+  grid.innerHTML = '';
+  App.cursoData.semanas.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'semana-card';
+    card.onclick = () => navigateTo('semana', { semanaId: s.id });
+    card.innerHTML = `
+      <div class="semana-card-top">
+        <span class="semana-card-num">${s.id.replace('semana-', 'Semana ')}</span>
+        <span class="dif-badge d${s.dificultad}">Nivel ${s.dificultad}</span>
+      </div>
+      <h3 class="semana-card-title">${s.nombre.replace(/^Semana \d+:\s*/, '')}</h3>
+      <p class="semana-card-desc">${s.descripcion}</p>
+      <div class="semana-card-footer">
+        <span>📖 ${s.lecciones?.length || 0} lecciones · 🟡 ${s.ejercicios_guiados?.length || 0} calentamiento</span>
+        <span class="btn-card-go">Explorar →</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ── 7. VISTA DETALLADA DE LA SEMANA (LA ESCALERA GRADUAL) ──
+function abrirSemana(semanaId) {
+  const semana = App.cursoData?.semanas?.find(s => s.id === semanaId);
+  if (!semana) return;
+
+  App.semanaActual = semana;
+  mostrarVista('semana');
+  actualizarBreadcrumb('Materias', semana.nombre);
+
+  // Actualizar sidebar activo
+  resaltarSidebar(semanaId);
+
+  // Banner
+  const badgeEl = document.getElementById('semana-badge-dif');
+  badgeEl.className = `semana-badge-dif dif-badge d${semana.dificultad}`;
+  badgeEl.textContent = `Nivel de Dificultad ${semana.dificultad} / 5`;
+
+  document.getElementById('semana-titulo').textContent = semana.nombre;
+  document.getElementById('semana-desc').textContent = semana.descripcion;
+
+  // Paso 1: Cuadernos de Teoría
+  const listTeoria = document.getElementById('ladder-teoria-list');
+  listTeoria.innerHTML = '';
+  if (semana.lecciones?.length) {
+    semana.lecciones.forEach((l, idx) => {
+      const item = document.createElement('div');
+      item.className = 'ladder-item';
+      item.onclick = () => navigateTo('leccion', { semanaId: semana.id, leccionId: l.id });
+      item.innerHTML = `
+        <div class="ladder-item-info">
+          <h4>📖 1.${idx + 1} ${l.titulo}</h4>
+          <p>Apunte interactivo de contenidos mínimos y ejemplos de código</p>
+        </div>
+        <button class="btn-open-item">Leer y Probar →</button>
+      `;
+      listTeoria.appendChild(item);
+    });
+  } else {
+    listTeoria.innerHTML = '<p style="padding:10px;color:var(--text-muted)">No hay lecciones registradas para esta semana.</p>';
+  }
+
+  // Paso 2: Ejercicios de Calentamiento Guiados
+  const listEj = document.getElementById('ladder-ejercicios-list');
+  listEj.innerHTML = '';
+  if (semana.ejercicios_guiados?.length) {
+    semana.ejercicios_guiados.forEach((ej, idx) => {
+      const item = document.createElement('div');
+      item.className = 'ladder-item';
+      item.onclick = () => navigateTo('ejercicio', { semanaId: semana.id, ejercicioId: ej.id });
+      item.innerHTML = `
+        <div class="ladder-item-info">
+          <h4>🟡 Paso 2.${idx + 1}: ${ej.titulo}</h4>
+          <p>${ej.objetivo} · Dificultad: <strong>${ej.nivel}</strong></p>
+        </div>
+        <button class="btn-open-item">Resolver Ejercicio →</button>
+      `;
+      listEj.appendChild(item);
+    });
+  } else {
+    listEj.innerHTML = '<p style="padding:10px;color:var(--text-muted)">Semana teórica o preparatoria para la AC.</p>';
+  }
+
+  // Paso 3: Actividad Práctica (AC)
+  const actBox = document.getElementById('ladder-actividad-box');
+  actBox.innerHTML = '';
+  if (semana.actividad_id) {
+    const ac = App.cursoData?.actividades?.find(a => a.id === semana.actividad_id);
+    if (ac) {
+      const item = document.createElement('div');
+      item.className = 'ladder-item';
+      item.style.borderLeft = '4px solid var(--accent-red)';
+      item.onclick = () => navigateTo('actividad', { actividadId: ac.id });
+      item.innerHTML = `
+        <div class="ladder-item-info">
+          <h4>🔴 Paso 3: ${ac.titulo}</h4>
+          <p>${ac.descripcion}</p>
+        </div>
+        <button class="btn-open-item" style="border-color:var(--accent-red);color:var(--accent-red)">Entrar al Desafío (AC) →</button>
+      `;
+      actBox.appendChild(item);
+    }
+  } else {
+    actBox.innerHTML = '<p style="padding:10px;color:var(--text-muted)">Esta semana no tiene una Actividad calificada directa asociada (continúa a la siguiente).</p>';
+  }
+}
+
+function volverASemana() {
+  if (App.semanaActual) {
+    navigateTo('semana', { semanaId: App.semanaActual.id });
+  } else {
+    navigateTo('home');
+  }
+}
+
+// ── 8. VISTA DE LECCIÓN DE TEORÍA ──
+function abrirLeccion(semanaId, leccionId) {
+  const semana = App.cursoData?.semanas?.find(s => s.id === semanaId);
+  if (!semana) return;
+  const leccion = semana.lecciones?.find(l => l.id === leccionId);
+  if (!leccion) return;
+
+  App.semanaActual = semana;
+  App.leccionActual = leccion;
+
+  mostrarVista('leccion');
+  actualizarBreadcrumb(semana.nombre, leccion.titulo);
+  resaltarSidebar(semanaId);
+
+  document.getElementById('leccion-crumb').textContent = `${semana.nombre} › Lección`;
+  document.getElementById('leccion-header-title').textContent = leccion.titulo;
+
+  const container = document.getElementById('leccion-container');
+  container.innerHTML = '';
+
+  if (!leccion.bloques || !leccion.bloques.length) {
+    container.innerHTML = '<p>Contenido en proceso de digitalización.</p>';
+    return;
+  }
+
+  leccion.bloques.forEach((b, i) => {
+    if (b.tipo === 'teoria') {
+      const div = document.createElement('div');
+      div.className = 'teoria-block';
+      div.innerHTML = (typeof marked !== 'undefined') ? marked.parse(b.contenido) : b.contenido;
+      container.appendChild(div);
+    } else if (b.tipo === 'codigo') {
+      const box = document.createElement('div');
+      box.className = 'code-snippet-box';
+      const cleanCode = b.contenido.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      box.innerHTML = `
+        <div class="code-snippet-header">
+          <span>Python 3.12 (Ejemplo Interactivo)</span>
+          <button class="btn-snippet-run" onclick="ejecutarSnippetInline(this, ${JSON.stringify(b.contenido)})">▶ Probar snippet</button>
+        </div>
+        <pre class="code-snippet-body"><code>${cleanCode}</code></pre>
+        ${b.output ? `<div class="code-snippet-output"><strong>Salida esperada:</strong>\n${b.output}</div>` : ''}
+        <div class="snippet-runtime-output" style="display:none;padding:8px 12px;background:#030712;color:#38bdf8;font-family:var(--font-mono);font-size:0.75rem;border-top:1px solid #1f2937"></div>
+      `;
+      container.appendChild(box);
+    }
+  });
+
+  // Resaltar sintaxis de código
+  if (typeof hljs !== 'undefined') {
+    container.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  }
+}
+
+async function ejecutarSnippetInline(btn, codigo) {
+  const box = btn.closest('.code-snippet-box');
+  const outEl = box.querySelector('.snippet-runtime-output');
+  outEl.style.display = 'block';
+  outEl.textContent = '⏳ Ejecutando en Python WebAssembly...';
+
+  const res = await correrPython(codigo);
+  if (res.exitcode === 0) {
+    outEl.style.color = '#34d399';
+    outEl.textContent = '✅ Salida:\n' + (res.stdout || '(Ejecutado sin salida por consola)');
+  } else {
+    outEl.style.color = '#f87171';
+    outEl.textContent = '❌ Error:\n' + (res.stderr || 'Error desconocido');
+  }
+}
+
+function cambiarLeccion(dir) {
+  if (!App.semanaActual || !App.leccionActual) return;
+  const lecciones = App.semanaActual.lecciones || [];
+  const idx = lecciones.findIndex(l => l.id === App.leccionActual.id);
+  const targetIdx = idx + dir;
+
+  if (targetIdx >= 0 && targetIdx < lecciones.length) {
+    navigateTo('leccion', { semanaId: App.semanaActual.id, leccionId: lecciones[targetIdx].id });
+  } else if (targetIdx >= lecciones.length) {
+    // Si terminó las lecciones, llevar al calentamiento
+    if (App.semanaActual.ejercicios_guiados?.length) {
+      navigateTo('ejercicio', { semanaId: App.semanaActual.id, ejercicioId: App.semanaActual.ejercicios_guiados[0].id });
+    } else {
+      volverASemana();
+    }
+  } else {
+    volverASemana();
+  }
+}
+
+// ── 9. VISTA SPLIT: EJERCICIO GUIADO (CALENTAMIENTO) ──
+function abrirEjercicioGuiado(semanaId, ejercicioId) {
+  const semana = App.cursoData?.semanas?.find(s => s.id === semanaId);
+  if (!semana) return;
+  const ej = semana.ejercicios_guiados?.find(e => e.id === ejercicioId);
+  if (!ej) return;
+
+  App.semanaActual = semana;
+  App.ejercicioActual = ej;
+  App.tipoActual = 'ejercicio';
+
+  mostrarVista('ejercicio');
+  actualizarBreadcrumb(semana.nombre, ej.titulo);
+  resaltarSidebar(semanaId);
+
+  // Tab bar de ejercicios de la semana
+  const tabs = document.getElementById('preguntas-tab-bar');
+  tabs.innerHTML = '';
+  semana.ejercicios_guiados.forEach((e, idx) => {
+    const btn = document.createElement('button');
+    btn.className = `tab-pregunta ${e.id === ej.id ? 'active' : ''}`;
+    btn.textContent = `Ejercicio ${idx + 1}`;
+    btn.onclick = () => navigateTo('ejercicio', { semanaId: semana.id, ejercicioId: e.id });
+    tabs.appendChild(btn);
+  });
+
+  // Enunciado
+  const badgeEl = document.getElementById('enunciado-tipo-badge');
+  badgeEl.className = 'enunciado-tipo-badge dif-badge d2';
+  badgeEl.textContent = `Calentamiento · ${ej.nivel}`;
+
+  document.getElementById('enunciado-title').textContent = ej.titulo;
+  document.getElementById('enunciado-subtitle').textContent = ej.objetivo;
+
+  const bodyEl = document.getElementById('enunciado-body');
+  bodyEl.innerHTML = `
+    <h3>Descripción del Problema</h3>
+    <p>${ej.descripcion}</p>
+    <h3>Instrucciones</h3>
+    <p>1. Completa el código en el editor de la derecha.<br>
+       2. Presiona <strong>▶ Ejecutar Código</strong> para probar tu solución.<br>
+       3. Presiona <strong>🧪 Evaluar Tests</strong> para verificar automáticamente si pasa todos los casos de prueba.</p>
   `;
 
-  if (item.completado) li.classList.add('done');
-
-  const activate = () => selectEjercicio(item.id ?? num, li);
-  li.addEventListener('click', activate);
-  li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
-
-  return li;
+  // Editor
+  configurarWorkspaceArchivos({
+    'main.py': ej.codigo_inicial
+  }, ej.tests_code);
 }
 
-/* ── Select exercise ── */
-async function selectEjercicio(id, listItem) {
-  // Update active state in sidebar
-  $$('.question-item').forEach((el) => el.classList.remove('active'));
-  if (listItem) listItem.classList.add('active');
+// ── 10. VISTA SPLIT: ACTIVIDAD PRÁCTICA (AC) ──
+function abrirActividad(actividadId) {
+  const ac = App.cursoData?.actividades?.find(a => a.id === actividadId);
+  if (!ac) return;
 
-  state.currentEjercicioId = id;
+  App.ejercicioActual = ac;
+  App.tipoActual = 'actividad';
 
-  // Show loading placeholder
-  el.emptyState.hidden = true;
-  el.enunciado.hidden  = false;
-  el.ejTitle.textContent = '⏳ Cargando…';
-  el.ejObjetivo.textContent = '';
-  el.ejDescripcion.innerHTML = '';
+  mostrarVista('ejercicio');
+  actualizarBreadcrumb('Actividades', ac.titulo.split(':')[0]);
+  resaltarSidebar(actividadId);
 
-  try {
-    const res  = await fetch(`/api/ejercicio/${id}`);
-    const data = await res.json();
-    renderEjercicio(data);
-  } catch (err) {
-    console.error('[ClearnPA] selectEjercicio error:', err);
-    // Use mock data for development / offline
-    renderEjercicio(getMockEjercicio(id));
+  // Tabs de preguntas / módulos de la AC
+  const tabs = document.getElementById('preguntas-tab-bar');
+  tabs.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.className = 'tab-pregunta active';
+  btn.textContent = ac.id;
+  tabs.appendChild(btn);
+
+  // Enunciado
+  const badgeEl = document.getElementById('enunciado-tipo-badge');
+  badgeEl.className = 'enunciado-tipo-badge dif-badge d4';
+  badgeEl.textContent = `Actividad Práctica Evaluada`;
+
+  document.getElementById('enunciado-title').textContent = ac.titulo;
+  document.getElementById('enunciado-subtitle').textContent = 'IIC2233 Programación Avanzada · Desafío Oficial';
+
+  const bodyEl = document.getElementById('enunciado-body');
+  bodyEl.innerHTML = `
+    <h3>Objetivo de la Actividad</h3>
+    <p>${ac.descripcion}</p>
+    <h3>Archivos Proporcionados</h3>
+    <p>Revisa las pestañas superiores del editor. Puedes explorar los módulos de apoyo (como <code>entities.py</code> o <code>utils/</code>) y completar la solución en el archivo principal.</p>
+  `;
+
+  // Configurar archivos en workspace
+  const archivos = ac.archivos && Object.keys(ac.archivos).length > 0 
+    ? ac.archivos 
+    : { 'main.py': ac.codigo_inicial || '# Desarrolla tu solución aquí\n' };
+
+  configurarWorkspaceArchivos(archivos, null);
+}
+
+// ── 11. VISTA SPLIT: EVALUACIÓN (INTERROGACIÓN / EXAMEN) ──
+function abrirEvaluacion(evalId) {
+  const ev = App.cursoData?.evaluaciones?.find(e => e.id === evalId);
+  if (!ev) return;
+
+  App.ejercicioActual = ev;
+  App.tipoActual = 'evaluacion';
+
+  mostrarVista('ejercicio');
+  actualizarBreadcrumb('Evaluaciones', ev.titulo);
+  resaltarSidebar(evalId);
+
+  // Tabs de preguntas
+  const tabs = document.getElementById('preguntas-tab-bar');
+  tabs.innerHTML = '';
+  const preguntas = ev.preguntas || [];
+  preguntas.forEach((p, idx) => {
+    const btn = document.createElement('button');
+    btn.className = `tab-pregunta ${idx === 0 ? 'active' : ''}`;
+    btn.textContent = `Pregunta ${idx + 1}`;
+    btn.onclick = () => {
+      document.querySelectorAll('.tab-pregunta').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      cargarPreguntaEvaluacion(p);
+    };
+    tabs.appendChild(btn);
+  });
+
+  if (preguntas.length > 0) {
+    cargarPreguntaEvaluacion(preguntas[0]);
   }
 }
 
-/* ══════════════════════════════════════════════════
-   EJECUTAR
-══════════════════════════════════════════════════ */
-async function ejecutar() {
-  if (!state.currentEjercicioId) return;
+function cargarPreguntaEvaluacion(p) {
+  const badgeEl = document.getElementById('enunciado-tipo-badge');
+  badgeEl.className = 'enunciado-tipo-badge dif-badge d5';
+  badgeEl.textContent = 'Pregunta de Examen / Interrogación';
 
-  // Save current file before running
-  if (state.monacoEditor) {
-    state.fileCode[state.activeFile] = state.monacoEditor.getValue();
-  }
+  document.getElementById('enunciado-title').textContent = p.titulo;
+  document.getElementById('enunciado-subtitle').textContent = 'Puntaje de evaluación escrita/práctica';
 
-  showLoading();
-  setEditorStatus('⏳ Ejecutando…', '');
+  const bodyEl = document.getElementById('enunciado-body');
+  bodyEl.innerHTML = `
+    <h3>Enunciado</h3>
+    <p>${p.descripcion}</p>
+  `;
 
-  try {
-    const res = await fetch('/api/ejecutar', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codigo:       state.fileCode,       // send all files
-        ejercicio_id: state.currentEjercicioId,
-      }),
-    });
-
-    const data = await res.json();
-    displayResults(data);
-
-  } catch (err) {
-    console.error('[ClearnPA] ejecutar error:', err);
-    setTerminalContent(`<span class="results-error">❌ Error de red: ${err.message}</span>`);
-    setEditorStatus('Error de red', 'err');
-  }
+  configurarWorkspaceArchivos({
+    'solucion.py': p.codigo_inicial || '# Desarrolla tu respuesta aquí\n'
+  }, null);
 }
 
-function displayResults(data) {
-  let html = '';
+// ── 12. CONFIGURACIÓN DEL WORKSPACE DEL EDITOR ──
+function configurarWorkspaceArchivos(archivos, testsCode = null) {
+  App.archivosActivos = { ...archivos };
+  App.testsActuales = testsCode;
 
-  if (data.stdout) {
-    html += `<span class="results-info">▶ STDOUT</span>\n`;
-    html += `<span class="results-stdout">${escapeHtml(data.stdout)}</span>\n`;
-  }
-  if (data.stderr) {
-    html += `<span class="results-info">⚠ STDERR</span>\n`;
-    html += `<span class="results-stderr">${escapeHtml(data.stderr)}</span>\n`;
-  }
-  if (data.resultado !== undefined) {
-    const ok = data.resultado === 'correcto' || data.resultado === true;
-    html += ok
-      ? `<span class="results-ok">✅ ¡Correcto!</span>\n`
-      : `<span class="results-error">❌ Incorrecto</span>\n`;
+  // Renderizar pestañas de archivos
+  const tabsBar = document.getElementById('editor-tabs-bar');
+  tabsBar.innerHTML = '';
 
-    if (data.tests) {
-      data.tests.forEach((t) => {
-        const icon = t.ok ? '✅' : '❌';
-        html += `  ${icon} ${escapeHtml(t.nombre)}\n`;
-      });
+  const nombres = Object.keys(archivos);
+  App.archivoActual = nombres.includes('main.py') ? 'main.py' : nombres[0];
+
+  nombres.forEach(nombre => {
+    const tab = document.createElement('div');
+    tab.className = `editor-tab ${nombre === App.archivoActual ? 'active' : ''}`;
+    tab.textContent = nombre;
+    tab.onclick = () => cambiarPestañaArchivo(nombre);
+    tabsBar.appendChild(tab);
+  });
+
+  // Asignar código al textarea
+  const textarea = document.getElementById('code-editor');
+  textarea.value = App.archivosActivos[App.archivoActual] || '';
+  App.codigoOriginal = textarea.value;
+
+  limpiarConsola();
+}
+
+function cambiarPestañaArchivo(nombre) {
+  const textarea = document.getElementById('code-editor');
+  // Guardar archivo anterior
+  if (App.archivoActual) {
+    App.archivosActivos[App.archivoActual] = textarea.value;
+  }
+
+  App.archivoActual = nombre;
+  document.querySelectorAll('.editor-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent === nombre);
+  });
+
+  textarea.value = App.archivosActivos[nombre] || '';
+}
+
+function configurarEditorTextarea() {
+  const textarea = document.getElementById('code-editor');
+  if (!textarea) return;
+
+  textarea.addEventListener('keydown', (e) => {
+    // Tabulación inteligente (4 espacios)
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + 4;
     }
-  }
-  if (!html) {
-    html = '<span class="results-hint">// Sin salida.</span>';
-  }
-
-  setTerminalContent(html);
-
-  const hasError = !!(data.stderr || data.resultado === false || data.resultado === 'incorrecto');
-  setEditorStatus(hasError ? '❌ Error' : '✅ OK', hasError ? 'err' : 'ok');
-
-  // Expand terminal
-  if (el.resultsPanel.classList.contains('collapsed')) toggleTerminal();
-}
-
-function setEditorStatus(text, cls = '') {
-  el.editorStatus.textContent = text;
-  el.editorStatus.className   = `editor-status ${cls}`;
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-/* ══════════════════════════════════════════════════
-   LIMPIAR
-══════════════════════════════════════════════════ */
-function limpiar() {
-  const initial = state.initialCode[state.activeFile];
-  if (initial !== undefined && state.monacoEditor) {
-    state.monacoEditor.setValue(initial);
-    state.fileCode[state.activeFile] = initial;
-    setEditorStatus('↺ Restaurado', '');
-    setTimeout(() => setEditorStatus('', ''), 2000);
-  }
-}
-
-/* ══════════════════════════════════════════════════
-   ENTREGAR
-══════════════════════════════════════════════════ */
-async function entregar() {
-  if (!state.currentEjercicioId) return;
-  if (!confirm('¿Deseas entregar tu solución? Esta acción no se puede deshacer.')) return;
-
-  if (state.monacoEditor) {
-    state.fileCode[state.activeFile] = state.monacoEditor.getValue();
-  }
-
-  el.btnEntregar.disabled = true;
-  setEditorStatus('📤 Entregando…', '');
-
-  try {
-    const res = await fetch('/api/entregar', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codigo:       state.fileCode,
-        ejercicio_id: state.currentEjercicioId,
-      }),
-    });
-    const data = await res.json();
-
-    if (data.ok || data.success) {
-      setEditorStatus('✅ Entregado', 'ok');
-      setTerminalContent('<span class="results-ok">✅ Solución entregada correctamente.</span>');
-      // Mark as done in sidebar
-      const activeItem = $('.question-item.active');
-      if (activeItem) activeItem.classList.add('done');
-    } else {
-      setEditorStatus('❌ Error al entregar', 'err');
-      setTerminalContent(`<span class="results-error">❌ ${escapeHtml(data.mensaje || data.error || 'Error desconocido')}</span>`);
+    // Ctrl + Enter para ejecutar
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      ejecutarCodigoUsuario();
     }
-  } catch (err) {
-    setEditorStatus('Error de red', 'err');
-    setTerminalContent(`<span class="results-error">❌ Error de red: ${err.message}</span>`);
-  } finally {
-    el.btnEntregar.disabled = false;
-  }
-}
-
-/* ══════════════════════════════════════════════════
-   MOCK DATA  (offline / development fallback)
-══════════════════════════════════════════════════ */
-function loadMockSidebar() {
-  const mock = [
-    { id: 'ac1', nombre: 'AC1 — Herencia y OOP',    tipo: 'actividad'  },
-    { id: 'ac2', nombre: 'AC2 — Árboles y Grafos',  tipo: 'actividad'  },
-    { id: 'ac3', nombre: 'AC3 — Iteradores',         tipo: 'actividad'  },
-    { id: 'ex1', nombre: 'EX1 — Examen Módulo 1',   tipo: 'evaluacion' },
-    { id: 'm1',  nombre: 'M1  — Introducción',       tipo: 'materia'    },
-  ];
-  state.ejercicios = mock;
-  el.sidebarCount.textContent = mock.length;
-  el.questionList.innerHTML   = '';
-  mock.forEach((item, idx) => {
-    el.questionList.appendChild(buildQuestionItem(item, idx + 1));
   });
 }
 
-function getMockEjercicio(id) {
+// ── 13. EJECUCIÓN Y EVALUACIÓN DE CÓDIGO ──
+async function correrPython(codigo, archivosVirtuales = {}) {
+  // 1. Si Pyodide está disponible en WebAssembly:
+  if (App.pyodide) {
+    let stdout = '';
+    let stderr = '';
+    
+    // Escribir archivos auxiliares en el sistema de archivos virtual de Pyodide
+    for (const [fname, cont] of Object.entries(archivosVirtuales)) {
+      try {
+        const partes = fname.split('/');
+        if (partes.length > 1) {
+          const dir = partes.slice(0, -1).join('/');
+          App.pyodide.FS.mkdirTree(dir);
+        }
+        App.pyodide.FS.writeFile(fname, cont);
+      } catch (e) {
+        // Ignorar si ya existe
+      }
+    }
+
+    App.pyodide.setStdout({ batched: (msg) => stdout += msg + '\n' });
+    App.pyodide.setStderr({ batched: (msg) => stderr += msg + '\n' });
+
+    try {
+      await App.pyodide.runPythonAsync(codigo);
+      return { stdout: stdout.trim(), stderr: stderr.trim(), exitcode: 0 };
+    } catch (err) {
+      return { stdout: stdout.trim(), stderr: err.message, exitcode: 1 };
+    }
+  }
+
+  // 2. Si no hay Pyodide, intentar el endpoint de backend Flask
+  try {
+    const res = await fetch('/api/ejecutar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codigo: codigo,
+        archivos: archivosVirtuales
+      })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // Sin servidor disponible
+  }
+
   return {
-    id,
-    titulo:      `Ejercicio ${id}`,
-    nombre_corto: String(id).toUpperCase(),
-    tipo:         'actividad',
-    objetivo:     'Aplicar los conceptos de Programación Avanzada vistos en clases.',
-    descripcion:  `## Enunciado\n\nCompleta la función **solve()** para que retorne el resultado esperado.\n\n- Lee los datos desde **stdin**.\n- Imprime el resultado en **stdout**.\n\nRecuerda respetar el formato de salida indicado en los ejemplos.`,
-    ejemplos: [
-      { titulo: 'Caso básico', input: '5\n3', output: '8' },
-      { titulo: 'Caso borde',  input: '0\n0', output: '0' },
-    ],
-    explicacion: 'El programa debe leer dos enteros y devolver su suma. Asegúrate de convertir la entrada con `int()`.',
-    archivos: {
-      'code.py':     '# Escribe tu solución aquí\n\ndef solve():\n    pass\n\nif __name__ == "__main__":\n    solve()\n',
-      'entities.py': '# Clases auxiliares (si las necesitas)\n',
-    },
+    stdout: '',
+    stderr: 'El motor Python está inicializándose en tu navegador. Espera unos segundos y vuelve a presionar Ejecutar.',
+    exitcode: 1
   };
 }
 
-/* ══════════════════════════════════════════════════
-   EVENT LISTENERS
-══════════════════════════════════════════════════ */
-function attachListeners() {
-  el.btnEjecutar.addEventListener('click', ejecutar);
-  el.btnLimpiar.addEventListener('click',  limpiar);
-  el.btnEntregar.addEventListener('click', entregar);
+async function ejecutarCodigoUsuario() {
+  const textarea = document.getElementById('code-editor');
+  App.archivosActivos[App.archivoActual] = textarea.value;
 
-  el.btnRevisar.addEventListener('click', () => {
-    alert('📋 Revisando entrega… (funcionalidad conectada al backend)');
-  });
+  const codigo = App.archivosActivos[App.archivoActual];
+  const outEl = document.getElementById('console-output');
+  const badgeEl = document.getElementById('console-status-badge');
 
-  // Terminal toggle
-  el.resultsToggle.addEventListener('click', toggleTerminal);
-  el.resultsToggle.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTerminal(); }
-  });
+  badgeEl.textContent = 'Ejecutando...';
+  badgeEl.style.color = '#f59e0b';
+  outEl.className = 'console-output';
+  outEl.textContent = '⏳ Ejecutando código en Python...\n';
+
+  const res = await correrPython(codigo, App.archivosActivos);
+
+  if (res.exitcode === 0) {
+    badgeEl.textContent = 'Éxito';
+    badgeEl.style.color = '#10b981';
+    outEl.className = 'console-output success';
+    outEl.textContent = res.stdout ? res.stdout : '(El código se ejecutó exitosamente sin salida de texto)';
+    if (res.stderr) {
+      outEl.textContent += '\n\n⚠️ Advertencias:\n' + res.stderr;
+    }
+  } else {
+    badgeEl.textContent = 'Error';
+    badgeEl.style.color = '#ef4444';
+    outEl.className = 'console-output error';
+    outEl.textContent = (res.stdout ? res.stdout + '\n\n' : '') + '❌ Error durante la ejecución:\n' + res.stderr;
+  }
 }
 
-/* ══════════════════════════════════════════════════
-   INIT
-══════════════════════════════════════════════════ */
-async function init() {
-  attachListeners();
+async function probarTestsUsuario() {
+  const textarea = document.getElementById('code-editor');
+  App.archivosActivos[App.archivoActual] = textarea.value;
 
-  // Disable action buttons until an exercise is selected
-  el.btnEjecutar.disabled = true;
-  el.btnLimpiar.disabled  = true;
-  el.btnEntregar.disabled = true;
+  const outEl = document.getElementById('console-output');
+  const badgeEl = document.getElementById('console-status-badge');
 
-  // Boot Monaco & load sidebar in parallel
-  await Promise.all([
-    initMonaco(),
-    loadSidebar(),
-  ]);
+  if (!App.testsActuales) {
+    badgeEl.textContent = 'Sin tests';
+    badgeEl.style.color = '#38bdf8';
+    outEl.className = 'console-output';
+    outEl.textContent = 'ℹ️ Esta actividad utiliza los tests públicos de su archivo correspondiente o verificación manual.';
+    return;
+  }
 
-  console.log('[ClearnPA] ✅ Aplicación lista');
+  badgeEl.textContent = 'Evaluando...';
+  badgeEl.style.color = '#f59e0b';
+  outEl.className = 'console-output';
+  outEl.textContent = '🧪 Ejecutando casos de prueba automáticos...\n';
+
+  // Combinar el código del usuario con los tests
+  const codigoCompleto = App.archivosActivos[App.archivoActual] + '\n\n# --- CASOS DE PRUEBA AUTOMÁTICOS ---\n' + App.testsActuales;
+  const res = await correrPython(codigoCompleto, App.archivosActivos);
+
+  if (res.exitcode === 0) {
+    badgeEl.textContent = 'Aprobado ✓';
+    badgeEl.style.color = '#10b981';
+    outEl.className = 'console-output success';
+    outEl.textContent = '🎉 ¡FELICITACIONES! Tu código pasó todos los tests automáticos.\n\n' + (res.stdout || '');
+  } else {
+    badgeEl.textContent = 'Falló ✕';
+    badgeEl.style.color = '#ef4444';
+    outEl.className = 'console-output error';
+    outEl.textContent = '❌ Algún test o aserción no pasó:\n\n' + res.stderr + '\n\n💡 Revisa el enunciado y los tipos de datos devueltos.';
+  }
 }
 
-// Wait for DOM
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+function reiniciarCodigoUsuario() {
+  const textarea = document.getElementById('code-editor');
+  textarea.value = App.codigoOriginal;
+  App.archivosActivos[App.archivoActual] = App.codigoOriginal;
+  limpiarConsola();
+}
+
+function limpiarConsola() {
+  const outEl = document.getElementById('console-output');
+  const badgeEl = document.getElementById('console-status-badge');
+  outEl.className = 'console-output';
+  outEl.textContent = 'Consola lista. Escribe tu código y presiona Ejecutar.';
+  badgeEl.textContent = 'Listo';
+  badgeEl.style.color = '#38bdf8';
+}
+
+function resaltarSidebar(id) {
+  document.querySelectorAll('.sidebar-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
 }

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ClearnP.A — Programación Avanzada IIC2233</title>
+  <link rel="stylesheet" href="static/css/style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <!-- marked.js para Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- highlight.js para sintaxis -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- Pyodide: Ejecutor de Python 3 real en el navegador (WebAssembly) -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════ TOPBAR ═══════════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="#" class="logo" onclick="navigateTo('home'); return false;">
+      <span class="logo-icon">&lt;/&gt;</span>
+      <span class="logo-text">Clearn<span class="logo-highlight">P.A</span></span>
+    </a>
+    <span class="badge badge-student">Estudiante</span>
+  </div>
+
+  <nav class="breadcrumb" id="breadcrumb">
+    <span class="bc-link" onclick="navigateTo('home')">Programación Avanzada</span>
+    <span class="bc-sep">›</span>
+    <span id="bc-seccion">Inicio</span>
+    <span class="bc-sep bc-sep-item hidden">›</span>
+    <span id="bc-item" class="hidden"></span>
+  </nav>
+
+  <div class="topbar-right">
+    <span class="pyodide-status" id="pyodide-status" title="Motor Python en WebAssembly">
+      <span class="status-dot"></span> <span id="status-text">Cargando Python...</span>
+    </span>
+    <span class="topbar-curso">IIC2233 · 2026-1</span>
+    <div class="avatar" title="Estudiante UC">DA</div>
+  </div>
+</header>
+
+<!-- ═══════════════════ CONTENEDOR PRINCIPAL ═══════════════════ -->
+<div class="main-layout">
+
+  <!-- ── BARRA LATERAL (SIDEBAR) ── -->
+  <aside class="sidebar">
+    <div class="sidebar-search">
+      <input type="text" placeholder="🔍 Buscar lección o ejercicio..." id="search-input" oninput="filtrarSidebar(this.value)"/>
+    </div>
+
+    <!-- Navegación por Materias -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header" onclick="toggleSeccion('sec-materias')">
+        <span class="sec-icon">📚</span>
+        <span>Contenidos (Paso a Paso)</span>
+        <span class="sec-arrow" id="arrow-sec-materias">▼</span>
+      </div>
+      <ul class="sidebar-list" id="sec-materias" data-open="true"></ul>
+    </div>
+
+    <!-- Actividades Prácticas -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header" onclick="toggleSeccion('sec-actividades')">
+        <span class="sec-icon">🏋️</span>
+        <span>Actividades Evaluadas (AC)</span>
+        <span class="sec-arrow" id="arrow-sec-actividades">▼</span>
+      </div>
+      <ul class="sidebar-list" id="sec-actividades" data-open="true"></ul>
+    </div>
+
+    <!-- Evaluaciones Sumativas -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header" onclick="toggleSeccion('sec-evaluaciones')">
+        <span class="sec-icon">📝</span>
+        <span>Interrogaciones & Examen</span>
+        <span class="sec-arrow" id="arrow-sec-evaluaciones">▼</span>
+      </div>
+      <ul class="sidebar-list" id="sec-evaluaciones" data-open="true"></ul>
+    </div>
+  </aside>
+
+  <!-- ── PANEL DE CONTENIDO ── -->
+  <main class="panel-content" id="panel-content">
+
+    <!-- VISTA: HOME / DASHBOARD -->
+    <div id="view-home" class="view active">
+      <div class="home-hero">
+        <div class="hero-badge">Ruta Progresiva de Aprendizaje</div>
+        <h1>Plataforma de Programación Avanzada</h1>
+        <p class="home-subtitle">Aprende los contenidos oficiales de <strong>IIC2233 (Python)</strong> con dificultad gradual: domina primero la teoría y ejercicios guiados antes de enfrentarte a las Actividades (AC) de alta complejidad.</p>
+
+        <div class="difficulty-legend">
+          <span class="leg-item"><span class="dif-badge d1">Nivel 1</span> Fundamentos</span>
+          <span class="leg-item"><span class="dif-badge d2">Nivel 2</span> Estructuras</span>
+          <span class="leg-item"><span class="dif-badge d3">Nivel 3</span> Intermedio (OOP & Iteradores)</span>
+          <span class="leg-item"><span class="dif-badge d4">Nivel 4</span> Avanzado (Funcional & GUI)</span>
+          <span class="leg-item"><span class="dif-badge d5">Nivel 5</span> Experto (Networking & Threads)</span>
+        </div>
+
+        <h2 class="section-title">Semanas del Semestre</h2>
+        <div class="home-grid" id="home-semanas-grid"></div>
+      </div>
+    </div>
+
+    <!-- VISTA: VISTA DETALLADA DE LA SEMANA (RUTA GRADUAL) -->
+    <div id="view-semana" class="view hidden">
+      <div class="semana-banner">
+        <button class="btn-back" onclick="navigateTo('home')">← Volver al inicio</button>
+        <div class="semana-meta">
+          <span class="semana-badge-dif" id="semana-badge-dif"></span>
+          <h1 id="semana-titulo"></h1>
+          <p id="semana-desc"></p>
+        </div>
+      </div>
+
+      <div class="ladder-container">
+        <!-- Nivel 1: Teoría -->
+        <div class="ladder-section">
+          <div class="ladder-header level-1">
+            <span class="ladder-icon">🟢</span>
+            <div>
+              <h3>Paso 1: Fundamentos y Conceptos</h3>
+              <p>Lee la materia explicada paso a paso y prueba snippets de código en vivo.</p>
+            </div>
+          </div>
+          <div class="ladder-list" id="ladder-teoria-list"></div>
+        </div>
+
+        <!-- Nivel 2: Calentamiento Guiado -->
+        <div class="ladder-section">
+          <div class="ladder-header level-2">
+            <span class="ladder-icon">🟡</span>
+            <div>
+              <h3>Paso 2: Ejercicios de Calentamiento (Dificultad Gradual)</h3>
+              <p>Problemas cortos con tests automáticos para afianzar el conocimiento antes de la AC.</p>
+            </div>
+          </div>
+          <div class="ladder-list" id="ladder-ejercicios-list"></div>
+        </div>
+
+        <!-- Nivel 3: Desafío de la Semana (AC) -->
+        <div class="ladder-section">
+          <div class="ladder-header level-3">
+            <span class="ladder-icon">🔴</span>
+            <div>
+              <h3>Paso 3: Actividad Práctica Completa (AC)</h3>
+              <p>El desafío universitario integrador con múltiples módulos y tests exhaustivos.</p>
+            </div>
+          </div>
+          <div class="ladder-list" id="ladder-actividad-box"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA: LECCIÓN DE TEORÍA (INTERACTIVA) -->
+    <div id="view-leccion" class="view hidden">
+      <div class="leccion-nav-bar">
+        <button class="btn-back" onclick="volverASemana()">← Volver a la Semana</button>
+        <div class="leccion-title-group">
+          <span class="leccion-crumb" id="leccion-crumb"></span>
+          <h2 id="leccion-header-title"></h2>
+        </div>
+      </div>
+      <div class="leccion-container" id="leccion-container"></div>
+      <div class="leccion-footer-nav">
+        <button class="btn-secondary" id="btn-leccion-prev" onclick="cambiarLeccion(-1)">← Lección anterior</button>
+        <button class="btn-primary" id="btn-leccion-next" onclick="cambiarLeccion(1)">Siguiente lección →</button>
+      </div>
+    </div>
+
+    <!-- VISTA: ENTORNO DE EJERCICIO / ACTIVIDAD (SPLIT SCREEN ESTILO CLEARN) -->
+    <div id="view-ejercicio" class="view hidden ejercicio-split-layout">
+      <!-- Columna Izquierda: Preguntas y Enunciado -->
+      <div class="ejercicio-panel-left">
+        <!-- Lista de preguntas estilo Clearn -->
+        <div class="preguntas-tab-bar" id="preguntas-tab-bar"></div>
+
+        <div class="enunciado-scroll-area" id="enunciado-scroll-area">
+          <div class="enunciado-header">
+            <div class="enunciado-tipo-badge" id="enunciado-tipo-badge"></div>
+            <h1 class="enunciado-title" id="enunciado-title"></h1>
+            <p class="enunciado-subtitle" id="enunciado-subtitle"></p>
+          </div>
+
+          <div class="enunciado-body" id="enunciado-body"></div>
+        </div>
+      </div>
+
+      <!-- Columna Derecha: Editor de Código + Terminal de Resultados -->
+      <div class="ejercicio-panel-right">
+        <!-- Pestañas de archivos (code.py, entities.py...) -->
+        <div class="editor-tabs-bar" id="editor-tabs-bar">
+          <div class="editor-tab active" data-file="main.py">main.py</div>
+        </div>
+
+        <!-- Área de edición -->
+        <div class="editor-workspace">
+          <textarea id="code-editor" class="code-editor-textarea" spellcheck="false" placeholder="# Escribe tu código Python aquí..."></textarea>
+        </div>
+
+        <!-- Barra de Botones de Acción -->
+        <div class="editor-controls">
+          <button class="btn-action btn-run" onclick="ejecutarCodigoUsuario()">
+            <span class="btn-icon">▶</span> Ejecutar Código
+          </button>
+          <button class="btn-action btn-test" onclick="probarTestsUsuario()">
+            <span class="btn-icon">🧪</span> Evaluar Tests
+          </button>
+          <button class="btn-action btn-reset" onclick="reiniciarCodigoUsuario()">
+            <span class="btn-icon">↺</span> Reiniciar
+          </button>
+          <span class="editor-shortcut-hint">Tip: Ctrl + Enter para ejecutar</span>
+        </div>
+
+        <!-- Terminal de Consola y Tests -->
+        <div class="console-drawer" id="console-drawer">
+          <div class="console-header">
+            <div class="console-title">
+              <span class="console-icon">💻</span>
+              <span>Consola & Resultados</span>
+              <span class="console-badge" id="console-status-badge">Listo</span>
+            </div>
+            <button class="btn-console-clear" onclick="limpiarConsola()">Limpiar</button>
+          </div>
+          <pre class="console-output" id="console-output">Esperando ejecución... Presiona '▶ Ejecutar Código' para probar tu solución.</pre>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="static/js/app.js"></script>
+</body>
+</html>

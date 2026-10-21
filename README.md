@@ -1,113 +1,102 @@
 # ClearnP.A — Plataforma de Programación Avanzada
 
-> Plataforma interactiva de ejercicios para el curso **IIC2233 Programación Avanzada** de la UC Chile.  
-> Inspirada en [Clearn.cl](https://www.clearn.cl), adaptada para contenidos avanzados en Python.
+> Plataforma web interactiva para el curso **IIC2233 Programación Avanzada** (Python) de la **Pontificia Universidad Católica de Chile**.  
+> Inspirada en [Clearn.cl](https://www.clearn.cl), diseñada con una **escalera de aprendizaje gradual** para que los estudiantes dominen los conceptos antes de enfrentar las Actividades (AC) de alta complejidad.
 
 ---
 
-## 🚀 Cómo ejecutar
+## 🌐 Acceso Directo (GitHub Pages)
 
-### 1. Instalar dependencias
+Puedes acceder a la plataforma directamente en tu navegador sin instalar nada:
+
+🔗 **[https://damian11daba.github.io/clearnAVANZADA/](https://damian11daba.github.io/clearnAVANZADA/)**
+
+> ⚡ **Ejecución en el Navegador con Pyodide (WebAssembly):**
+> La plataforma ejecuta código Python 3.12 real directamente en tu navegador web. No requiere servidor ni backend para correr pruebas o ejercicios.
+
+---
+
+## 🎯 Enlaces Directos por Sección (Deep Linking)
+
+La plataforma soporta URLs directas para saltar inmediatamente a cualquier semana, lección o actividad:
+
+* **Inicio / Dashboard:** `https://damian11daba.github.io/clearnAVANZADA/#home`
+* **Semana 1 (OOP Básico):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-01`
+* **Semana 3 (Estructuras de Datos):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-03`
+* **Semana 4 (OOP Avanzado):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-04`
+* **Semana 6 (Excepciones e Iteradores):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-06`
+* **Semana 7 (Programación Funcional):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-07`
+* **Semana 9 (GUI & Threads):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-09`
+* **Semana 10 y 11 (Networking & Sockets):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-10`
+* **Semana 15 (Grafos & Regex):** `https://damian11daba.github.io/clearnAVANZADA/#semana/semana-15`
+* **Actividad AC1 (Medallistas):** `https://damian11daba.github.io/clearnAVANZADA/#actividad/AC1`
+* **Actividad AC2 (Premios & Namedtuples):** `https://damian11daba.github.io/clearnAVANZADA/#actividad/AC2`
+* **Interrogación 1 (I1):** `https://damian11daba.github.io/clearnAVANZADA/#evaluacion/I1`
+
+---
+
+## 🪜 Escalera de Aprendizaje Gradual
+
+Cada semana del curso está estructurada en 3 niveles progresivos:
+
+1. 🟢 **Paso 1: Fundamentos y Conceptos (Contenidos Mínimos):**
+   * Lectura interactiva de los apuntes y notebooks oficiales.
+   * Botón `▶ Probar snippet` para ejecutar ejemplos teóricos en vivo.
+2. 🟡 **Paso 2: Ejercicios de Calentamiento (Dificultad Progresiva):**
+   * Desafíos cortos y guiados (Fácil → Medio → Avanzado).
+   * Editor de código dividido (split screen) estilo Clearn.
+   * Botón `🧪 Evaluar Tests` con verificación automática de aserciones.
+3. 🔴 **Paso 3: Actividad Práctica Completa (AC):**
+   * El desafío integrador de nivel universitario con múltiples módulos (`main.py`, `entities.py`, `utils/`).
+   * Tests exhaustivos y preparación para las evaluaciones.
+
+---
+
+## 💻 Ejecución Local con Servidor Flask (Opcional)
+
+Si prefieres ejecutar la plataforma de forma local en tu computadora:
 
 ```bash
+# 1. Instalar dependencias
 pip install -r requirements.txt
-```
 
-### 2. Iniciar el servidor
-
-```bash
+# 2. Iniciar el servidor local
 python run.py
-```
 
-### 3. Abrir en el navegador
-
-```
-http://localhost:5000
+# 3. Abrir en el navegador
+# http://localhost:5000
 ```
 
 ---
 
-## 📁 Estructura del proyecto
+## 📁 Estructura del Repositorio
 
 ```
 clearnP.A/
-├── run.py                        ← Punto de entrada
-├── requirements.txt              ← Dependencias (Flask, flask-cors)
-├── README.md
-└── app/
-    ├── __init__.py               ← Factory de Flask
-    ├── routes.py                 ← API REST + renderizado HTML
+├── index.html               ← Página principal (funciona directo en GitHub Pages)
+├── run.py                   ← Servidor local Flask
+├── requirements.txt         ← Dependencias de Python
+├── README.md                ← Documentación y enlaces
+│
+├── static/                  ← Archivos CSS y JavaScript
+│   ├── css/style.css        ← Estilos inspirados en Clearn.cl
+│   └── js/app.js            ← Lógica de la app, Pyodide y Deep Linking
+│
+├── data/
+│   └── curso.json           ← Base de datos de contenidos, lecciones, ACs y tests
+│
+├── scripts/
+│   └── build_data.py        ← Compilador de notebooks a curso.json
+│
+└── app/                     ← Módulo backend Flask (para modo servidor)
+    ├── __init__.py
+    ├── routes.py
     ├── templates/
-    │   └── index.html            ← UI completa estilo Clearn (3 paneles)
-    ├── static/
-    │   ├── css/style.css         ← Estilos (verde, sidebar, editor, terminal)
-    │   └── js/app.js             ← Lógica: Monaco Editor + fetch API
-    ├── ejercicios/
-    │   └── AC1.json              ← Ejercicio AC1 (Medallistas Olímpicos)
-    └── sandbox/                  ← Ejecución aislada del código del alumno
+    └── static/
 ```
 
 ---
 
-## 🧩 Contenidos incluidos
-
-### 📚 Materias (dificultad gradual)
-| Semana | Tema |
-|--------|------|
-| 1-2 | Introducción y entorno de trabajo |
-| 3 | Estructuras de datos (listas, dicts, sets, stacks) |
-| 4 | OOP Avanzado (herencia, clases abstractas, mixins) |
-| 6 | Excepciones, Iterables e Iteradores |
-| 7 | Programación Funcional (map, filter, reduce, lambdas) |
-| 9 | Interfaces Gráficas I (PyQt6, signals, slots) |
-| 10-11 | Serialización y Networking (JSON, Pickle, Sockets) |
-| 14 | Interfaces Gráficas II (modelos/vistas) |
-| 15 | Tópicos Avanzados (decoradores, metaclases) |
-
-### 🏋️ Actividades
-| ID | Tema |
-|----|------|
-| AC1 | Tabla de Medallistas (OOP básico) |
-| AC2 | Estadísticas de Premios (namedtuples, dicts) |
-| AC3 | Genética (herencia, clases abstractas) |
-| AC4 | Laberinto (búsqueda en grafos) |
-| AC5 | Simulación de Eventos (funcional) |
-| AC6 | Cliente-Servidor (sockets TCP) |
-| AC7 | Laberinto Avanzado (búsqueda heurística) |
-| ACBonus | Wikipedia Queries (serialización) |
-
-### 📝 Evaluaciones
-- Interrogación 1: OOP, Estructuras de Datos, Iteradores
-- Interrogación 2: Funcional, Networking, GUI
-- Examen Final: Todos los contenidos
-
----
-
-## 🔌 API Endpoints
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/` | Interfaz principal |
-| `GET` | `/api/cursos` | Lista de cursos |
-| `GET` | `/api/cursos/<id>/secciones` | Secciones del curso |
-| `GET` | `/api/ejercicio/<id>` | Datos del ejercicio |
-| `POST` | `/api/ejecutar` | Ejecuta código Python (sandbox) |
-| `POST` | `/api/test` | Corre tests públicos (pytest) |
-
----
-
-## 🛡️ Sandbox de ejecución
-
-El código enviado por el usuario se ejecuta de forma **aislada**:
-1. Se crea un directorio temporal `app/sandbox/<uuid>/`
-2. Se escribe el código como `main.py`
-3. Se copian los archivos auxiliares del ejercicio
-4. Se ejecuta con `subprocess` con **timeout de 10 segundos**
-5. Se retornan stdout/stderr y se **limpia el directorio**
-
----
-
-## 📦 Basado en el repositorio IIC2233-2026-1
-
-El contenido de ejercicios está basado en el syllabus oficial del curso  
-**IIC2233 Programación Avanzada — PUC Chile, 2026-1**.
+## 🎓 Créditos
+* Basado en el material docente del curso **IIC2233 Programación Avanzada** de la Pontificia Universidad Católica de Chile.
+* Interfaz y metodología inspiradas en la plataforma **Clearn.cl**.
