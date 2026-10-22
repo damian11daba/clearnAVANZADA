@@ -483,7 +483,7 @@ function abrirEjercicioGuiado(semanaId, ejercicioId) {
   }, ej.tests_code);
 }
 
-// ── 10. VISTA SPLIT: ACTIVIDAD PRÁCTICA (AC) ──
+// ── 10. VISTA SPLIT: ACTIVIDAD PRÁCTICA (AC EN UN SOLO ARCHIVO) ──
 function abrirActividad(actividadId) {
   const ac = App.cursoData?.actividades?.find(a => a.id === actividadId);
   if (!ac) return;
@@ -495,36 +495,41 @@ function abrirActividad(actividadId) {
   actualizarBreadcrumb('Actividades', ac.titulo.split(':')[0]);
   resaltarSidebar(actividadId);
 
-  // Tabs de preguntas / módulos de la AC
+  // Tabs de preguntas / Actividades
   const tabs = document.getElementById('preguntas-tab-bar');
   tabs.innerHTML = '';
-  const btn = document.createElement('button');
-  btn.className = 'tab-pregunta active';
-  btn.textContent = ac.id;
-  tabs.appendChild(btn);
+  App.cursoData?.actividades?.forEach(otraAc => {
+    const btn = document.createElement('button');
+    btn.className = `tab-pregunta ${otraAc.id === ac.id ? 'active' : ''}`;
+    btn.textContent = otraAc.id;
+    btn.onclick = () => navigateTo('actividad', { actividadId: otraAc.id });
+    tabs.appendChild(btn);
+  });
 
   // Enunciado
   const badgeEl = document.getElementById('enunciado-tipo-badge');
   badgeEl.className = 'enunciado-tipo-badge dif-badge d4';
-  badgeEl.textContent = `Actividad Práctica Evaluada`;
+  badgeEl.textContent = `Actividad Práctica · Un Solo Archivo`;
 
   document.getElementById('enunciado-title').textContent = ac.titulo;
-  document.getElementById('enunciado-subtitle').textContent = 'IIC2233 Programación Avanzada · Desafío Oficial';
+  document.getElementById('enunciado-subtitle').textContent = 'IIC2233 Programación Avanzada · Desafío Autocontenido';
 
   const bodyEl = document.getElementById('enunciado-body');
   bodyEl.innerHTML = `
     <h3>Objetivo de la Actividad</h3>
     <p>${ac.descripcion}</p>
-    <h3>Archivos Proporcionados</h3>
-    <p>Revisa las pestañas superiores del editor. Puedes explorar los módulos de apoyo (como <code>entities.py</code> o <code>utils/</code>) y completar la solución en el archivo principal.</p>
+    <h3>Formato Un Solo Archivo (Single-File)</h3>
+    <p>Esta actividad está empaquetada en <strong>un solo archivo autocontenido (<code>main.py</code>)</strong> con todas las clases, datos de prueba y lógica necesaria para que puedas resolverla, ejecutarla y probarla directamente en tu navegador sin lidiar con imports rotos.</p>
+    <h3>Instrucciones</h3>
+    <p>1. Completa la solución en el editor de la derecha.<br>
+       2. Presiona <strong>▶ Ejecutar Código</strong> para correr el programa.<br>
+       3. Presiona <strong>🧪 Evaluar Tests</strong> para verificar automáticamente tu entrega con aserciones.</p>
   `;
 
-  // Configurar archivos en workspace
-  const archivos = ac.archivos && Object.keys(ac.archivos).length > 0 
-    ? ac.archivos 
-    : { 'main.py': ac.codigo_inicial || '# Desarrolla tu solución aquí\n' };
-
-  configurarWorkspaceArchivos(archivos, null);
+  // Configurar archivo único
+  configurarWorkspaceArchivos({
+    'main.py': ac.codigo_inicial || '# Desarrolla tu solución aquí\n'
+  }, ac.tests_code || null);
 }
 
 // ── 11. VISTA SPLIT: EVALUACIÓN (INTERROGACIÓN / EXAMEN) ──
