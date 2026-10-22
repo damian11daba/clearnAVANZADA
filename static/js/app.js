@@ -610,6 +610,7 @@ function configurarWorkspaceArchivos(archivos, testsCode = null) {
   App.codigoOriginal = textarea.value;
 
   limpiarConsola();
+  cerrarDrawer();
 }
 
 function cambiarPestañaArchivo(nombre) {
@@ -777,6 +778,7 @@ function reiniciarCodigoUsuario() {
   textarea.value = App.codigoOriginal;
   App.archivosActivos[App.archivoActual] = App.codigoOriginal;
   limpiarConsola();
+  cerrarDrawer();
 }
 
 function limpiarConsola() {
@@ -792,4 +794,97 @@ function resaltarSidebar(id) {
   document.querySelectorAll('.sidebar-item').forEach(el => {
     el.classList.toggle('active', el.dataset.id === id);
   });
+}
+
+// ── 14. PISTA Y SOLUCIÓN (DRAWER) ──
+function mostrarPista() {
+  const ej = App.ejercicioActual;
+  if (!ej) return;
+
+  const drawer = document.getElementById('hint-solution-drawer');
+  const title = document.getElementById('drawer-title');
+  const content = document.getElementById('drawer-content');
+  const btnLoad = document.getElementById('btn-load-solution');
+
+  title.textContent = '💡 Pista';
+  title.className = 'drawer-title';
+  btnLoad.style.display = 'none';
+
+  const pistaTexto = ej.pista || 'No hay pista disponible para este ejercicio.';
+  content.innerHTML = typeof marked !== 'undefined' ? marked.parse(pistaTexto) : `<pre>${pistaTexto}</pre>`;
+  
+  if (typeof hljs !== 'undefined') {
+    content.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  }
+
+  drawer.classList.remove('hidden');
+}
+
+function mostrarSolucion() {
+  const ej = App.ejercicioActual;
+  if (!ej) return;
+
+  const drawer = document.getElementById('hint-solution-drawer');
+  const title = document.getElementById('drawer-title');
+  const content = document.getElementById('drawer-content');
+  const btnLoad = document.getElementById('btn-load-solution');
+
+  title.textContent = '👁️ Solución de Referencia';
+  title.className = 'drawer-title solution';
+  btnLoad.style.display = 'inline-block';
+
+  const solTexto = ej.solucion || '# Solución no disponible';
+  const cleanCode = solTexto.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  content.innerHTML = `<p style="font-size:0.75rem;color:#a1a1aa;margin-bottom:6px">Puedes revisar la respuesta correcta o cargarla directamente en tu editor:</p><pre><code class="language-python">${cleanCode}</code></pre>`;
+
+  if (typeof hljs !== 'undefined') {
+    content.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  }
+
+  drawer.classList.remove('hidden');
+}
+
+function cerrarDrawer() {
+  const drawer = document.getElementById('hint-solution-drawer');
+  if (drawer) drawer.classList.add('hidden');
+}
+
+function cargarSolucionEnEditor() {
+  const ej = App.ejercicioActual;
+  if (!ej || !ej.solucion) return;
+
+  const confirmar = confirm('¿Deseas cargar la respuesta correcta en el editor? Esto reemplazará lo que hayas escrito.');
+  if (!confirmar) return;
+
+  const textarea = document.getElementById('code-editor');
+  textarea.value = ej.solucion;
+  App.archivosActivos[App.archivoActual] = ej.solucion;
+
+  cerrarDrawer();
+
+  const outEl = document.getElementById('console-output');
+  const badgeEl = document.getElementById('console-status-badge');
+  badgeEl.textContent = 'Solución';
+  badgeEl.style.color = '#c084fc';
+  outEl.className = 'console-output';
+  outEl.textContent = '📥 Solución cargada en el editor. Presiona "▶ Ejecutar" o "🧪 Evaluar Tests" para verificarla.';
+}
+
+async function copiarContenidoDrawer() {
+  const ej = App.ejercicioActual;
+  if (!ej) return;
+
+  const title = document.getElementById('drawer-title');
+  const esSolucion = title.classList.contains('solution');
+  const textoACopiar = esSolucion ? (ej.solucion || '') : (ej.pista || '');
+
+  try {
+    await navigator.clipboard.writeText(textoACopiar);
+    const btn = document.getElementById('btn-copy-drawer');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => btn.textContent = orig, 1500);
+  } catch (err) {
+    console.warn('Error al copiar:', err);
+  }
 }

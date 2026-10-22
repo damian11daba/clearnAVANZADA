@@ -206,15 +206,34 @@
         <!-- Barra de Botones de Acción -->
         <div class="editor-controls">
           <button class="btn-action btn-run" onclick="ejecutarCodigoUsuario()">
-            <span class="btn-icon">▶</span> Ejecutar Código
+            <span class="btn-icon">▶</span> Ejecutar
           </button>
           <button class="btn-action btn-test" onclick="probarTestsUsuario()">
             <span class="btn-icon">🧪</span> Evaluar Tests
           </button>
+          <button class="btn-action btn-hint" onclick="mostrarPista()">
+            <span class="btn-icon">💡</span> Pista
+          </button>
+          <button class="btn-action btn-solution" onclick="mostrarSolucion()">
+            <span class="btn-icon">👁️</span> Solución
+          </button>
           <button class="btn-action btn-reset" onclick="reiniciarCodigoUsuario()">
             <span class="btn-icon">↺</span> Reiniciar
           </button>
-          <span class="editor-shortcut-hint">Tip: Ctrl + Enter para ejecutar</span>
+          <span class="editor-shortcut-hint">Tip: Ctrl + Enter</span>
+        </div>
+
+        <!-- Drawer para Pista y Solución -->
+        <div class="hint-solution-drawer hidden" id="hint-solution-drawer">
+          <div class="drawer-header">
+            <div class="drawer-title" id="drawer-title">💡 Pista</div>
+            <div class="drawer-actions">
+              <button class="btn-drawer-action" id="btn-load-solution" onclick="cargarSolucionEnEditor()" style="display:none">📥 Cargar en Editor</button>
+              <button class="btn-drawer-action" id="btn-copy-drawer" onclick="copiarContenidoDrawer()">📋 Copiar</button>
+              <button class="btn-drawer-close" onclick="cerrarDrawer()">✕</button>
+            </div>
+          </div>
+          <div class="drawer-content" id="drawer-content"></div>
         </div>
 
         <!-- Terminal de Consola y Tests -->
